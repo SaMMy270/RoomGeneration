@@ -1,0 +1,88 @@
+body,
+html,
+#root {
+  height: 100%;
+  margin: 0;
+  font-family: Inter, Arial, sans-serif;
+  background: #f3f4f6;
+}
+
+.app {
+  display: grid;
+  grid-template-columns: 360px 1fr;
+  gap: 16px;
+  height: 100vh;
+  padding: 16px;
+  box-sizing: border-box;
+}
+
+.sidebar {
+  background: white;
+  border-radius: 12px;
+  padding: 16px;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06);
+}
+
+.canvas-wrap {
+  background: linear-gradient(180deg, #ffffff, #f8fafc);
+  border-radius: 12px;
+  padding: 12px;
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.04);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.controls {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+input[type="number"],
+input[type="text"] {
+  width: 100%;
+  padding: 8px;
+  margin-top: 6px;
+  box-sizing: border-box;
+}
+
+button {
+  padding: 8px 10px;
+  border: 0;
+  background: #0ea5a4;
+  color: white;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+button.secondary {
+  background: #64748b;
+}
+
+.small {
+  font-size: 13px;
+  padding: 6px 8px;
+}
+
+.catalog {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.catalog button {
+  background: #f3f4f6;
+  border: 1px solid #cbd5e1;
+  padding: 6px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.catalog button.selected {
+  background: #2563eb;
+  color: white;
+  border-color: #2563eb;
+}
