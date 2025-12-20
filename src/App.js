@@ -1,155 +1,173 @@
-// App.js
+// src/App.js
 import React, { useState, useRef } from "react";
-import RoomCanvas from "./RoomCanvas";
-import { saveRoomToFirestore, loadRoomFromFirestore } from "./firebase";
-import { exportSceneToGLB } from "./exporter";
-import "./style.css";
-
-const catalog = [
-  { name: "Chair", model: "/models/gaming_chair.glb" },
-  { name: "Table", model: "/models/table.glb" },
-  { name: "Sofa", model: "/models/sofa.glb" },
+import Room from "./components/Room";
+import { exportSceneToGLB } from "./utils/exporter";
+import './style.css';
+import chair1 from './products/models/gaming_chair.glb';
+import sofa1 from './products/models/sofa.glb';
+import bed1 from "./products/models/single_bed.glb";
+import table1 from "./products/models/study_table.glb"
+import cimg from "./products/assets/gamingchair.webp"
+import simg from "./products/assets/sofa.jpg"
+import bimg from "./products/assets/bed1.jpg"
+import timg from "./products/assets/table1.webp"
+// Catalog products
+const PRODUCTS = [
+  { id: "chair1", name: "Gaming Chair", category: "Chair", model: chair1, thumbnail: cimg, price: 15000 },
+  { id: "sofa1", name: "Sofa", category: "Sofa", model: sofa1, thumbnail: simg, price: 30000 },
+  { id: "bed1", name: "Single Bed", category: "Bed", model: bed1, thumbnail: bimg, price: 10000 },
+  { id: "table1", name: "Study Table", category: "Table", model: table1, thumbnail: timg, price: 3000 }
 ];
+
+function BillModal({ total, onClose, onAddToCart }) {
+  return (
+    <div className="bill-overlay">
+      <div className="bill-box">
+        <h2>Bill Summary</h2>
+        <p>Total furniture cost: ₹{total.toLocaleString()}</p>
+        <div className="bill-actions">
+          <button onClick={onClose} className="btn btn-muted">Close</button>
+          <button onClick={onAddToCart} className="btn btn-primary">Add to Cart</button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function App() {
   const [length, setLength] = useState(4);
   const [width, setWidth] = useState(3);
   const [height, setHeight] = useState(2.6);
-  const [name, setName] = useState("my-room");
+  const [wallColor, setWallColor] = useState("#f8fafc");
 
-  // which model in catalog is chosen to place (string: model path)
-  const [selectedCatalogModel, setSelectedCatalogModel] = useState(null);
-
-  // furniture list stored as objects: { id, model, position }
+  const [catalogSelection, setCatalogSelection] = useState(null);
   const [furnitureList, setFurnitureList] = useState([]);
+  const [selectedIndex, setSelectedIndex] = useState(null);
+  const [isBillOpen, setIsBillOpen] = useState(false);
+  const [category, setCategory] = useState("All");
+
   const sceneRef = useRef(null);
+  const totalCost = furnitureList.reduce((s, f) => s + (f.price || 0), 0);
 
-  // Add furniture at given position. Only works if a catalog item is selected.
-  const handleAddFurniture = (position) => {
-    if (!selectedCatalogModel) return alert("Select a furniture item from the catalog first.");
-    const id = Date.now().toString();
-    setFurnitureList((prev) => [...prev, { id, model: selectedCatalogModel, position }]);
+  const handleExport = () => {
+    if (!sceneRef.current) return alert("Scene not ready yet.");
+    exportSceneToGLB(sceneRef.current, `room_${Date.now()}.glb`);
   };
 
-  // Update furniture position (called from RoomCanvas while dragging)
-  const handleUpdateFurniture = (index, newPos) => {
-    setFurnitureList((prev) => prev.map((it, i) => (i === index ? { ...it, position: newPos } : it)));
+  const handleAddToCart = () => {
+    setIsBillOpen(false);
+    alert("✅ Added to cart.");
   };
 
-  // Save/load/export are unchanged
-  const handleSave = async () => {
-    const payload = {
-      name: name || `room-${Date.now()}`,
-      length,
-      width,
-      height,
-      furnitureList,
-      createdAt: Date.now(),
-    };
-    try {
-      await saveRoomToFirestore(payload);
-      alert("Saved to Firebase!");
-    } catch (e) {
-      console.error(e);
-      alert("Save failed.");
-    }
-  };
+  // When furniture is placed in Room, clear the selected model
+  const handlePlaced = () => setCatalogSelection(null);
 
-  const handleLoad = async () => {
-    try {
-      const doc = await loadRoomFromFirestore();
-      if (!doc) return alert("No rooms found.");
-      setLength(doc.length);
-      setWidth(doc.width);
-      setHeight(doc.height);
-      setName(doc.name || "loaded-room");
-      setFurnitureList(doc.furnitureList || []);
-      alert("Loaded latest room.");
-    } catch (e) {
-      console.error(e);
-      alert("Load failed.");
-    }
+  // Filter products by category
+  const filteredProducts = category === "All"
+    ? PRODUCTS
+    : PRODUCTS.filter(p => p.category === category);
+  // global hook to detect placement and deselect model
+  window.onModelPlaced = () => {
+    setCatalogSelection(null);
   };
-
-  const handleExport = async () => {
-    if (!sceneRef.current) return alert("Scene not ready.");
-    try {
-      await exportSceneToGLB(sceneRef.current, `${name || "room"}.glb`);
-    } catch (e) {
-      console.error(e);
-      alert("Export failed: " + e.message);
-    }
-  };
-
-  // Delete last selected or by index: for now provide a simple delete-last button or you can extend selection deletion later
-  const handleDeleteLast = () => setFurnitureList((prev) => prev.slice(0, -1));
 
   return (
-    <div className="app">
-      <div className="sidebar">
-        <h3>Room Generator</h3>
-        <label>
-          Project name
-          <input type="text" value={name} onChange={(e) => setName(e.target.value)} />
-        </label>
+    <div className="app-root">
+      <header className="topbar">
+        <h1>PlanPro — Room Designer</h1>
+        <button onClick={handleExport} className="btn btn-primary">Export .glb</button>
+      </header>
 
-        <label>
-          Length (m)
-          <input type="number" step="0.1" value={length} onChange={(e) => setLength(parseFloat(e.target.value) || 0)} />
-        </label>
+      <div className="main">
+        {/* Left sidebar — room controls */}
+        <aside className="sidebar">
+          <div className="panel">
+            <h3>Room Dimensions</h3>
+            <label>Length (m)</label>
+            <input type="number" value={length} step="0.1" onChange={(e) => setLength(parseFloat(e.target.value) || "-")} />
+            <label>Width (m)</label>
+            <input type="number" value={width} step="0.1" onChange={(e) => setWidth(parseFloat(e.target.value) || "-")} />
+            <label>Height (m)</label>
+            <input type="number" value={height} step="0.05" onChange={(e) => setHeight(parseFloat(e.target.value) || "-")} />
+          </div>
 
-        <label>
-          Width (m)
-          <input type="number" step="0.1" value={width} onChange={(e) => setWidth(parseFloat(e.target.value) || 0)} />
-        </label>
+          <div className="panel">
+            <h3>Wall Color</h3>
+            <input type="color" value={wallColor} onChange={(e) => setWallColor(e.target.value)} />
+          </div>
 
-        <label>
-          Height (m)
-          <input type="number" step="0.05" value={height} onChange={(e) => setHeight(parseFloat(e.target.value) || 0)} />
-        </label>
+          <div className="panel">
+            <button className="btn btn-primary" onClick={() => setIsBillOpen(true)}>Show Total Cost</button>
+            <div style={{ marginTop: 8, color: "#444" }}>Current total: ₹{totalCost.toLocaleString()}</div>
+          </div>
+        </aside>
 
-        <div className="controls">
-          <button onClick={handleSave}>Save</button>
-          <button onClick={handleLoad}>Load</button>
-          <button onClick={handleExport}>Export</button>
-        </div>
+        {/* Center: 3D Room */}
+        <section className="canvas-area">
+          <Room
+            length={length}
+            width={width}
+            height={height}
+            wallColor={wallColor}
+            selectedModel={catalogSelection}
+            furnitureList={furnitureList}
+            setFurnitureList={setFurnitureList}
+            selectedIndex={selectedIndex}
+            setSelectedIndex={setSelectedIndex}
+            sceneRefRef={sceneRef}
 
-        <hr />
-
-        <h4>Furniture Catalog</h4>
-        <div className="catalog">
-          {catalog.map((item) => (
+          />
+        </section>
+        {selectedIndex !== null && (
+          <div className="floating-toolbar">
             <button
-              key={item.name}
-              className={selectedCatalogModel === item.model ? "selected" : ""}
-              onClick={() => setSelectedCatalogModel(item.model)}
+              className="btn btn-danger"
+              onClick={() => {
+                setFurnitureList(furnitureList.filter((_, i) => i !== selectedIndex));
+                setSelectedIndex(null);
+              }}
             >
-              {item.name}
+              🗑 Delete Selected
             </button>
-          ))}
-        </div>
+          </div>
+        )}
 
-        <p style={{ fontSize: 12, marginTop: 10 }}>
-          Select an item in the catalog, then click the floor to place it. <br />
-          Click a furniture item to select and drag it to move (camera will be disabled during drag).
-        </p>
+        {/* Right side: Catalog */}
+        <aside className="catalog-side">
+          <div className="panel">
+            <h3>Catalog</h3>
+            <select value={category} onChange={(e) => setCategory(e.target.value)}>
+              <option>All</option>
+              <option>Chair</option>
+              <option>Sofa</option>
+              <option>Table</option>
+              <option>Bed</option>
+            </select>
 
-        <button style={{ marginTop: 8 }} onClick={handleDeleteLast}>
-          Delete Last Furniture
-        </button>
+            <div className="catalog-grid">
+              {filteredProducts.map((p) => (
+                <div
+                  key={p.id}
+                  className={`catalog-card ${catalogSelection?.id === p.id ? "selected" : ""}`}
+                  onClick={() => setCatalogSelection(p)}
+                >
+                  <img src={p.thumbnail} alt={p.name} />
+                  <div className="catalog-info">
+                    <div className="catalog-name">{p.name}</div>
+                    <div className="catalog-price">₹{p.price.toLocaleString()}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </aside>
       </div>
 
-      <div className="canvas-wrap">
-        <RoomCanvas
-          ref={sceneRef}
-          length={length}
-          width={width}
-          height={height}
-          furnitureList={furnitureList}
-          onAddFurniture={handleAddFurniture}
-          onUpdateFurniture={handleUpdateFurniture}
-        />
-      </div>
+      {isBillOpen && (
+        <BillModal total={totalCost} onClose={() => setIsBillOpen(false)} onAddToCart={handleAddToCart} />
+      )}
     </div>
+
+
   );
 }
