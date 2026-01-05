@@ -84,9 +84,9 @@ export default function App() {
           <div className="panel">
             <h3>Room Dimensions</h3>
             <label>Length (m)</label>
-            <input type="number" value={length} step="0.1" onChange={(e) => setLength(parseFloat(e.target.value) || "-")} />
+            <input type="number" value={length} step="0.1" onChange={(e) => setLength(parseFloat(e.target.value) || "-")} /><br></br>
             <label>Width (m)</label>
-            <input type="number" value={width} step="0.1" onChange={(e) => setWidth(parseFloat(e.target.value) || "-")} />
+            <input type="number" value={width} step="0.1" onChange={(e) => setWidth(parseFloat(e.target.value) || "-")} /><br></br>
             <label>Height (m)</label>
             <input type="number" value={height} step="0.05" onChange={(e) => setHeight(parseFloat(e.target.value) || "-")} />
           </div>
