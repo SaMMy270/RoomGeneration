@@ -1,173 +1,127 @@
-// src/App.js
-import React, { useState, useRef } from "react";
+import React, { useState } from "react";
 import Room from "./components/Room";
-import { exportSceneToGLB } from "./utils/exporter";
 import './style.css';
-import chair1 from './products/models/gaming_chair.glb';
-import sofa1 from './products/models/sofa.glb';
-import bed1 from "./products/models/single_bed.glb";
-import table1 from "./products/models/study_table.glb"
-import cimg from "./products/assets/gamingchair.webp"
-import simg from "./products/assets/sofa.jpg"
-import bimg from "./products/assets/bed1.jpg"
-import timg from "./products/assets/table1.webp"
-// Catalog products
-const PRODUCTS = [
-  { id: "chair1", name: "Gaming Chair", category: "Chair", model: chair1, thumbnail: cimg, price: 15000 },
-  { id: "sofa1", name: "Sofa", category: "Sofa", model: sofa1, thumbnail: simg, price: 30000 },
-  { id: "bed1", name: "Single Bed", category: "Bed", model: bed1, thumbnail: bimg, price: 10000 },
-  { id: "table1", name: "Study Table", category: "Table", model: table1, thumbnail: timg, price: 3000 }
-];
 
-function BillModal({ total, onClose, onAddToCart }) {
-  return (
-    <div className="bill-overlay">
-      <div className="bill-box">
-        <h2>Bill Summary</h2>
-        <p>Total furniture cost: ₹{total.toLocaleString()}</p>
-        <div className="bill-actions">
-          <button onClick={onClose} className="btn btn-muted">Close</button>
-          <button onClick={onAddToCart} className="btn btn-primary">Add to Cart</button>
-        </div>
-      </div>
-    </div>
-  );
-}
+import sofa1 from "./products/assets/sofa.jpg";
+import sofa2 from "./products/models/sofa.glb";
+import chair1 from "./products/assets/gamingchair.webp";
+import chair2 from "./products/models/gaming_chair.glb";
+import bed1 from "./products/assets/bed1.jpg";
+import bed2 from "./products/models/single_bed.glb";
+import table1 from "./products/assets/table1.webp";
+import table2 from "./products/models/study_table.glb";
+
+
+const PRODUCTS = [
+  { id: "sofa1", name: "Modern Sofa", price: 30000, model: sofa2, thumbnail: sofa1 },
+  { id: "chair1", name: "Gaming Chair", price: 15000, model: chair2, thumbnail: chair1 },
+  {id:"bed1", name:"Single Bed", price:3000, model:bed2 , thumbnail:bed1},
+  {id: "table1", name:"Dining Table", price: 2000, model:table2,thumbnail:table1},
+];
 
 export default function App() {
   const [length, setLength] = useState(4);
   const [width, setWidth] = useState(3);
-  const [height, setHeight] = useState(2.6);
-  const [wallColor, setWallColor] = useState("#f8fafc");
-
-  const [catalogSelection, setCatalogSelection] = useState(null);
+  const [wallColor, setWallColor] = useState("#ffffff");
+  const [recentColors, setRecentColors] = useState(["#ffffff", "#27272a"]);
   const [furnitureList, setFurnitureList] = useState([]);
+  const [selectedCatalogItem, setSelectedCatalogItem] = useState(null);
   const [selectedIndex, setSelectedIndex] = useState(null);
   const [isBillOpen, setIsBillOpen] = useState(false);
-  const [category, setCategory] = useState("All");
 
-  const sceneRef = useRef(null);
-  const totalCost = furnitureList.reduce((s, f) => s + (f.price || 0), 0);
+  const totalCost = furnitureList.reduce((sum, item) => sum + item.price, 0);
 
-  const handleExport = () => {
-    if (!sceneRef.current) return alert("Scene not ready yet.");
-    exportSceneToGLB(sceneRef.current, `room_${Date.now()}.glb`);
-  };
-
-  const handleAddToCart = () => {
-    setIsBillOpen(false);
-    alert("✅ Added to cart.");
-  };
-
-  // When furniture is placed in Room, clear the selected model
-  const handlePlaced = () => setCatalogSelection(null);
-
-  // Filter products by category
-  const filteredProducts = category === "All"
-    ? PRODUCTS
-    : PRODUCTS.filter(p => p.category === category);
-  // global hook to detect placement and deselect model
-  window.onModelPlaced = () => {
-    setCatalogSelection(null);
+  const updateWallColor = (color) => {
+    setWallColor(color);
+    if (!recentColors.includes(color)) {
+      setRecentColors([color, ...recentColors].slice(0, 5));
+    }
   };
 
   return (
     <div className="app-root">
       <header className="topbar">
-        <h1>PlanPro — Room Designer</h1>
-        <button onClick={handleExport} className="btn btn-primary">Export .glb</button>
+        <div className="logo">PlanPro — Room Designer</div>
+        <button className="btn-primary">Export .glb</button>
       </header>
 
       <div className="main">
-        {/* Left sidebar — room controls */}
         <aside className="sidebar">
           <div className="panel">
-            <h3>Room Dimensions</h3>
-            <label>Length (m)</label>
-            <input type="number" value={length} step="0.1" onChange={(e) => setLength(parseFloat(e.target.value) || "-")} /><br></br>
-            <label>Width (m)</label>
-            <input type="number" value={width} step="0.1" onChange={(e) => setWidth(parseFloat(e.target.value) || "-")} /><br></br>
-            <label>Height (m)</label>
-            <input type="number" value={height} step="0.05" onChange={(e) => setHeight(parseFloat(e.target.value) || "-")} />
+            <h3>Dimensions (meters)</h3>
+            <div className="input-group">
+              <label>L:</label>
+              <input type="number" value={length} onChange={(e) => setLength(e.target.value)} />
+              <label>W:</label>
+              <input type="number" value={width} onChange={(e) => setWidth(e.target.value)} />
+            </div>
           </div>
 
           <div className="panel">
             <h3>Wall Color</h3>
-            <input type="color" value={wallColor} onChange={(e) => setWallColor(e.target.value)} />
+            <div className="swatch-grid">
+              {["#ffffff", "#f1f5f9", "#cbd5e1", "#ffedd5", "#fee2e2"].map(c => (
+                <div key={c} className="swatch" style={{ background: c }} onClick={() => updateWallColor(c)} />
+              ))}
+            </div>
+            <p className="sub-label">Recent Colors</p>
+            <div className="swatch-grid">
+              {recentColors.map((c, i) => (
+                <div key={i} className="swatch mini" style={{ background: c }} onClick={() => setWallColor(c)} />
+              ))}
+            </div>
           </div>
 
           <div className="panel">
-            <button className="btn btn-primary" onClick={() => setIsBillOpen(true)}>Show Total Cost</button>
-            <div style={{ marginTop: 8, color: "#444" }}>Current total: ₹{totalCost.toLocaleString()}</div>
+            <button className="btn-bill" onClick={() => setIsBillOpen(true)}>Check Bill</button>
+            <p className="total-text">Total: ₹{totalCost.toLocaleString()}</p>
           </div>
         </aside>
 
-        {/* Center: 3D Room */}
         <section className="canvas-area">
           <Room
-            length={length}
-            width={width}
-            height={height}
+            length={length} width={width}
             wallColor={wallColor}
-            selectedModel={catalogSelection}
-            furnitureList={furnitureList}
-            setFurnitureList={setFurnitureList}
-            selectedIndex={selectedIndex}
-            setSelectedIndex={setSelectedIndex}
-            sceneRefRef={sceneRef}
-
+            furnitureList={furnitureList} setFurnitureList={setFurnitureList}
+            selectedModel={selectedCatalogItem} setSelectedModel={setSelectedCatalogItem}
+            selectedIndex={selectedIndex} setSelectedIndex={setSelectedIndex}
           />
+          {selectedIndex !== null && (
+            <button className="btn-delete" onClick={() => {
+              setFurnitureList(furnitureList.filter((_, i) => i !== selectedIndex));
+              setSelectedIndex(null);
+            }}>Delete Selected Item</button>
+          )}
         </section>
-        {selectedIndex !== null && (
-          <div className="floating-toolbar">
-            <button
-              className="btn btn-danger"
-              onClick={() => {
-                setFurnitureList(furnitureList.filter((_, i) => i !== selectedIndex));
-                setSelectedIndex(null);
-              }}
-            >
-              🗑 Delete Selected
-            </button>
-          </div>
-        )}
 
-        {/* Right side: Catalog */}
         <aside className="catalog-side">
-          <div className="panel">
-            <h3>Catalog</h3>
-            <select value={category} onChange={(e) => setCategory(e.target.value)}>
-              <option>All</option>
-              <option>Chair</option>
-              <option>Sofa</option>
-              <option>Table</option>
-              <option>Bed</option>
-            </select>
-
-            <div className="catalog-grid">
-              {filteredProducts.map((p) => (
-                <div
-                  key={p.id}
-                  className={`catalog-card ${catalogSelection?.id === p.id ? "selected" : ""}`}
-                  onClick={() => setCatalogSelection(p)}
-                >
-                  <img src={p.thumbnail} alt={p.name} />
-                  <div className="catalog-info">
-                    <div className="catalog-name">{p.name}</div>
-                    <div className="catalog-price">₹{p.price.toLocaleString()}</div>
-                  </div>
+          <h3>Catalog</h3>
+          <div className="catalog-grid">
+            {PRODUCTS.map(p => (
+              <div key={p.id} className={`cat-card ${selectedCatalogItem?.id === p.id ? 'active' : ''}`} onClick={() => setSelectedCatalogItem(p)}>
+                <img src={p.thumbnail} alt={p.name} />
+                <div className="cat-info">
+                  <p>{p.name}</p>
+                  <span>₹{p.price}</span>
                 </div>
-              ))}
-            </div>
+              </div>
+            ))}
           </div>
         </aside>
       </div>
 
       {isBillOpen && (
-        <BillModal total={totalCost} onClose={() => setIsBillOpen(false)} onAddToCart={handleAddToCart} />
+        <div className="modal-overlay" onClick={() => setIsBillOpen(false)}>
+          <div className="bill-box" onClick={e => e.stopPropagation()}>
+            <h2>Order Summary</h2>
+            {furnitureList.map((item, i) => (
+              <div key={i} className="bill-row"><span>{item.name}</span><span>₹{item.price}</span></div>
+            ))}
+            <div className="bill-total">Total: ₹{totalCost.toLocaleString()}</div>
+            <button onClick={() => setIsBillOpen(false)}>Close</button>
+          </div>
+        </div>
       )}
     </div>
-
-
   );
 }
