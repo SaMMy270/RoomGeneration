@@ -40,7 +40,7 @@ function Floor({ length, width, textureType, onPlacement }) {
 }
 
 // 3. Main Room Component
-export default function Room({ length, width, wallColor, floorTexture, furnitureList, setFurnitureList, selectedModel, setSelectedModel, selectedIndex, setSelectedIndex }) {
+export default function Room({ length, width, wallColor, floorTexture, furnitureList, setFurnitureList, selectedModel, setSelectedModel, selectedIndex, setSelectedIndex, setWarning }) {
     const controlsRef = useRef();
     const draggingRef = useRef({ index: null, offset: new THREE.Vector3(), lastValid: new THREE.Vector3() });
 
@@ -51,6 +51,16 @@ export default function Room({ length, width, wallColor, floorTexture, furniture
         const onFloorDown = (e) => {
             e.stopPropagation();
             if (!selectedModel) return;
+
+            // Check if distance to any existing item is less than 1 meter
+            const isTooClose = furnitureList.some(item =>
+                new THREE.Vector3(...item.position).distanceTo(e.point) < 1.0
+            );
+
+            if (isTooClose) {
+                setWarning({ show: true, message: "You can't place 2 objects on top of each other!" });
+                return;
+            }
 
             const newItem = {
                 id: Date.now(),
@@ -96,7 +106,12 @@ export default function Room({ length, width, wallColor, floorTexture, furniture
         const model = useMemo(() => gltf.clone(), [gltf]);
         const clickStartTime = useRef(0);
 
-        // --- REAL-TIME COLLISION CHECKING ---
+        // We use a ref for colliding so the event listeners always have the "real-time" value
+        const collidingRef = useRef(false);
+        useEffect(() => {
+            collidingRef.current = colliding;
+        }, [colliding]);
+
         const onMove = (ev) => {
             if (draggingRef.current.index !== index || !groupRef.current) return;
 
@@ -113,53 +128,45 @@ export default function Room({ length, width, wallColor, floorTexture, furniture
             if (ray.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), intersect)) {
                 let pos = intersect.add(draggingRef.current.offset);
 
-                // 1. Apply boundary limits
-                const clampedX = Math.max(-length / 2, Math.min(length / 2, pos.x));
-                const clampedZ = Math.max(-width / 2, Math.min(width / 2, pos.z));
+                const clampedX = Math.max(-L / 2, Math.min(L / 2, pos.x));
+                const clampedZ = Math.max(-W / 2, Math.min(W / 2, pos.z));
 
                 groupRef.current.position.set(clampedX, 0, clampedZ);
 
-                // 2. CHECK DISTANCE TO OTHER OBJECTS
                 const hit = furnitureList.some((other, i) => {
                     if (i === index) return false;
                     const distance = new THREE.Vector3(...other.position).distanceTo(groupRef.current.position);
-                    return distance < 1.0; // Collision radius (1 meter)
+                    return distance < 1.2; // Slightly increased for better detection
                 });
 
                 setColliding(hit);
-
-                // 3. If NOT colliding, save this as the "Last Valid Position"
-                if (!hit) {
-                    draggingRef.current.lastValid.copy(groupRef.current.position);
-                }
+                if (!hit) draggingRef.current.lastValid.copy(groupRef.current.position);
             }
         };
 
         const onUp = () => {
             const clickDuration = Date.now() - clickStartTime.current;
 
-            // ROTATION
             if (clickDuration < 200 && draggingRef.current.index === index) {
                 const newRotation = (item.rotation || 0) + Math.PI / 2;
                 setFurnitureList(prev => prev.map((f, i) =>
                     i === index ? { ...f, rotation: newRotation } : f
                 ));
-            }
-            // DRAG END
-            else if (draggingRef.current.index === index && groupRef.current) {
-                if (colliding) {
-                    // Snap back to the last safe spot
-                    const lv = draggingRef.current.lastValid;
-                    groupRef.current.position.set(lv.x, 0, lv.z);
-                    setColliding(false);
+            } else if (draggingRef.current.index === index) {
+                if (collidingRef.current) {
+                    // SUCCESS: This triggers the App.js modal
+                    setWarning({ show: true, message: "Collision detected! The object has been removed." });
+                    setFurnitureList(prev => prev.filter((_, i) => i !== index));
+                    setSelectedIndex(null);
+                } else {
+                    const p = groupRef.current.position;
+                    setFurnitureList(prev => prev.map((f, i) =>
+                        i === index ? { ...f, position: [p.x, 0, p.z] } : f
+                    ));
                 }
-
-                const p = groupRef.current.position;
-                setFurnitureList(prev => prev.map((f, i) =>
-                    i === index ? { ...f, position: [p.x, 0, p.z] } : f
-                ));
             }
 
+            // --- CRITICAL CLEANUP ---
             draggingRef.current.index = null;
             if (controlsRef.current) controlsRef.current.enabled = true;
             window.removeEventListener("pointermove", onMove);
@@ -187,7 +194,7 @@ export default function Room({ length, width, wallColor, floorTexture, furniture
                 />
                 {isSelected && (
                     <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.01, 0]}>
-                        <planeGeometry args={[1.2, 1.2]} />
+                        <planeGeometry args={[1.5, 1.5]} />
                         <meshBasicMaterial color={colliding ? "red" : "lime"} transparent opacity={0.3} />
                     </mesh>
                 )}

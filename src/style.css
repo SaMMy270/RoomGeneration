@@ -1,31 +1,171 @@
+.app-root {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
+}
 
+.topbar {
+  height: 60px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 20px;
+  border-bottom: 1px solid #ddd;
+  background: #fff;
+}
 
-.app-root { display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
-.topbar { height: 60px; display: flex; justify-content: space-between; align-items: center; padding: 0 20px; border-bottom: 1px solid #ddd; background: #fff; }
-.main { display: flex; flex: 1; overflow: hidden; }
+.main {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
 
-.sidebar, .catalog-side { width: 300px; background: #fff; padding: 20px; overflow-y: auto; flex-shrink: 0; }
-.sidebar { border-right: 1px solid #ddd; }
-.catalog-side { border-left: 1px solid #ddd; }
+.sidebar,
+.catalog-side {
+  width: 300px;
+  background: #fff;
+  padding: 20px;
+  overflow-y: auto;
+  flex-shrink: 0;
+}
 
-.canvas-area { flex: 1; position: relative; background: #cbd5e1; }
+.sidebar {
+  border-right: 1px solid #ddd;
+}
 
-.panel { margin-bottom: 25px; border: 1px solid #eee; padding: 15px; border-radius: 8px; }
-.input-group { display: flex; gap: 10px; align-items: center; }
-.input-group input { width: 60px; padding: 5px; }
+.catalog-side {
+  border-left: 1px solid #ddd;
+}
 
-.swatch-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 5px; margin-top: 5px; }
-.swatch { aspect-ratio: 1; border-radius: 4px; cursor: pointer; border: 1px solid #ccc; }
-.swatch.mini { transform: scale(0.8); }
+.canvas-area {
+  flex: 1;
+  position: relative;
+  background: #cbd5e1;
+}
 
-.cat-card { display: flex; align-items: center; gap: 10px; padding: 10px; border: 1px solid #eee; border-radius: 10px; margin-bottom: 10px; cursor: pointer; }
-.cat-card.active { border-color: #3b82f6; background: #eff6ff; }
-.cat-card img { width: 50px; height: 50px; object-fit: cover; border-radius: 5px; }
+.panel {
+  margin-bottom: 25px;
+  border: 1px solid #eee;
+  padding: 15px;
+  border-radius: 8px;
+}
 
-.btn-delete { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); background: #ef4444; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; }
+.input-group {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.input-group input {
+  width: 60px;
+  padding: 5px;
+}
+
+.swatch-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 5px;
+  margin-top: 5px;
+}
+
+.swatch {
+  aspect-ratio: 1;
+  border-radius: 4px;
+  cursor: pointer;
+  border: 1px solid #ccc;
+}
+
+.swatch.mini {
+  transform: scale(0.8);
+}
+
+.cat-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid #eee;
+  border-radius: 10px;
+  margin-bottom: 10px;
+  cursor: pointer;
+}
+
+.cat-card.active {
+  border-color: #3b82f6;
+  background: #eff6ff;
+}
+
+.cat-card img {
+  width: 50px;
+  height: 50px;
+  object-fit: cover;
+  border-radius: 5px;
+}
+
+.btn-delete {
+  position: absolute;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #ef4444;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 5px;
+  cursor: pointer;
+}
 
 /* Modal Styles */
-.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 100; }
-.bill-box { background: #fff; padding: 30px; border-radius: 10px; width: 400px; }
-.bill-row { display: flex; justify-content: space-between; margin-bottom: 10px; }
-.bill-total { font-weight: bold; border-top: 2px solid #eee; padding-top: 10px; margin-top: 10px; }
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.bill-box {
+  background: #fff;
+  padding: 30px;
+  border-radius: 10px;
+  width: 400px;
+}
+
+.bill-row {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.bill-total {
+  font-weight: bold;
+  border-top: 2px solid #eee;
+  padding-top: 10px;
+  margin-top: 10px;
+}
+
+.warning-box {
+  border-top: 6px solid #ef4444;
+  /* Bright Red */
+  text-align: center;
+  max-width: 400px;
+}
+
+.warning-icon {
+  font-size: 50px;
+  margin-bottom: 10px;
+}
+
+.warning-box h2 {
+  color: #ef4444;
+  margin-top: 0;
+}
+
+.warning-box p {
+  color: #374151;
+  font-weight: 500;
+  margin-bottom: 20px;
+}

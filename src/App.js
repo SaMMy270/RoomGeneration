@@ -32,7 +32,7 @@ export default function App() {
   const [selectedCatalogItem, setSelectedCatalogItem] = useState(null);
   const [selectedIndex, setSelectedIndex] = useState(null);
   const [isBillOpen, setIsBillOpen] = useState(false);
-
+  const [warning, setWarning] = useState({ show: false, message: "" });
   const totalCost = furnitureList.reduce((sum, item) => sum + item.price, 0);
 
   // Function to handle Doors and Windows (The "Essentials")
@@ -99,11 +99,11 @@ export default function App() {
             floorTexture={floorTexture}
             furnitureList={furnitureList}
             setFurnitureList={setFurnitureList}
-            selectedModel={selectedCatalogItem} // HANDSHAKE: App state -> Room prop
-            setSelectedModel={setSelectedCatalogItem} // To clear it after placement
+            selectedModel={selectedCatalogItem}
+            setSelectedModel={setSelectedCatalogItem}
             selectedIndex={selectedIndex}
             setSelectedIndex={setSelectedIndex}
-
+            setWarning={setWarning}
           />
 
           {selectedIndex !== null && (
@@ -137,7 +137,17 @@ export default function App() {
           </div>
         </aside>
       </div>
-
+      {warning.show && (
+        <div className="modal-overlay" onClick={() => setWarning({ show: false, message: "" })}>
+          <div className="bill-box warning-box" onClick={e => e.stopPropagation()}>
+            <div className="warning-icon">⚠️</div>
+            <h2>Caution</h2>
+            <p>{warning.message}</p>
+            <button className="btn-primary" onClick={() => setWarning({ show: false, message: "" })}>OK</button>
+          </div>
+        </div>
+      )}
+      
       {isBillOpen && (
         <div className="modal-overlay" onClick={() => setIsBillOpen(false)}>
           <div className="bill-box" onClick={e => e.stopPropagation()}>
