@@ -147,26 +147,42 @@ export default function Room({ length, width, wallColor, floorTexture, furniture
         const onUp = () => {
             const clickDuration = Date.now() - clickStartTime.current;
 
+            // SAFETY CHECK: If the ref is null, stop immediately
+            if (!groupRef.current) {
+                cleanupListeners();
+                return;
+            }
+
             if (clickDuration < 200 && draggingRef.current.index === index) {
+                // Rotation logic
                 const newRotation = (item.rotation || 0) + Math.PI / 2;
                 setFurnitureList(prev => prev.map((f, i) =>
                     i === index ? { ...f, rotation: newRotation } : f
                 ));
             } else if (draggingRef.current.index === index) {
                 if (collidingRef.current) {
-                    // SUCCESS: This triggers the App.js modal
                     setWarning({ show: true, message: "Collision detected! The object has been removed." });
                     setFurnitureList(prev => prev.filter((_, i) => i !== index));
                     setSelectedIndex(null);
+                    // We return here so we don't try to read position below
+                    cleanupListeners();
+                    return;
                 } else {
-                    const p = groupRef.current.position;
-                    setFurnitureList(prev => prev.map((f, i) =>
-                        i === index ? { ...f, position: [p.x, 0, p.z] } : f
-                    ));
+                    // Check again before reading position
+                    if (groupRef.current) {
+                        const p = groupRef.current.position;
+                        setFurnitureList(prev => prev.map((f, i) =>
+                            i === index ? { ...f, position: [p.x, 0, p.z] } : f
+                        ));
+                    }
                 }
             }
 
-            // --- CRITICAL CLEANUP ---
+            cleanupListeners();
+        };
+
+        // Helper to keep code clean
+        const cleanupListeners = () => {
             draggingRef.current.index = null;
             if (controlsRef.current) controlsRef.current.enabled = true;
             window.removeEventListener("pointermove", onMove);
