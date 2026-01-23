@@ -1,10 +1,9 @@
-import React, { useMemo, useRef, Suspense } from "react";
-import { Canvas, useLoader } from "@react-three/fiber";
+import React, { useMemo, useRef, Suspense, useState, useEffect } from "react";
+import { Canvas, useLoader, useFrame, useThree } from "@react-three/fiber";
 import { OrbitControls, Grid } from "@react-three/drei";
 import * as THREE from "three";
 import FurniturePrimitive from "./FurniturePrimitive";
 
-// --- Helper: AABB Collision Check (UNCHANGED) ---
 const checkCollision = (pos, size, existingItems) => {
     const margin = 0.1;
     const w1 = size.width || 1;
@@ -18,13 +17,143 @@ const checkCollision = (pos, size, existingItems) => {
     });
 };
 
-function SceneContent({ roomData, wallColor, floorTexture, furnitureList, setFurnitureList, selectedModel, setSelectedModel, selectedIndex, setSelectedIndex }) {
+function SceneContent({
+    roomData,
+    wallColor,
+    floorTexture,
+    furnitureList = [],
+    setFurnitureList,
+    selectedModel,
+    setSelectedModel,
+    selectedIndex,
+    setSelectedIndex,
+    highlightedWallType,
+    isPlacementMode,
+    onWallClick,
+    viewMode = '3D',
+    isPreviewActive = false
+}) {
+    const { camera } = useThree();
     const controlsRef = useRef();
+    const [hoveredWall, setHoveredWall] = useState(null);
+
+    // NEW: Manual override flag to allow free camera movement
+    const [hasInteracted, setHasInteracted] = useState(false);
+
+    // Camera Animation State
+    const [viewTarget, setViewTarget] = useState({
+        pos: new THREE.Vector3(8, 8, 8),
+        look: new THREE.Vector3(0, 0, 0)
+    });
 
     const { shape, dimensions, openings = [] } = roomData || {};
     const { length: L = 6, width: W = 6, notchL = 2, notchW = 2 } = dimensions || {};
 
-    // Load Texture logic remains the same...
+    // --- 1. Geometry Logic (Points for T-Shape, L-Shape, etc.) ---
+    const pointsData = useMemo(() => {
+        const hL = L / 2;
+        const hW = W / 2;
+        const sW = notchW / 2;
+        const headY = hW - notchL;
+
+        switch (shape) {
+            case 'L_SHAPE':
+                return [
+                    { pos: new THREE.Vector2(-hL, -hW), id: 'length' },
+                    { pos: new THREE.Vector2(hL, -hW), id: 'width' },
+                    { pos: new THREE.Vector2(hL, hW - notchW), id: 'notchW' },
+                    { pos: new THREE.Vector2(hL - notchL, hW - notchW), id: 'notchL' },
+                    { pos: new THREE.Vector2(hL - notchL, hW), id: 'width' },
+                    { pos: new THREE.Vector2(-hL, hW), id: 'length' },
+                ];
+            case 'T_SHAPE':
+                return [
+                    { pos: new THREE.Vector2(-sW, -hW), id: 'notchW' },
+                    { pos: new THREE.Vector2(sW, -hW), id: 'notchW' },
+                    { pos: new THREE.Vector2(sW, headY), id: 'notchL' },
+                    { pos: new THREE.Vector2(hL, headY), id: 'length' },
+                    { pos: new THREE.Vector2(hL, hW), id: 'width' },
+                    { pos: new THREE.Vector2(-hL, hW), id: 'width' },
+                    { pos: new THREE.Vector2(-hL, headY), id: 'length' },
+                    { pos: new THREE.Vector2(-sW, headY), id: 'notchL' },
+                ];
+            case 'HEXAGON':
+                const hexPts = [];
+                for (let i = 0; i < 6; i++) {
+                    const angle = (i / 6) * Math.PI * 2 + Math.PI / 6;
+                    hexPts.push({ pos: new THREE.Vector2(Math.cos(angle) * hL, Math.sin(angle) * hL), id: 'length' });
+                }
+                return hexPts;
+            default: // SQUARE
+                return [
+                    { pos: new THREE.Vector2(-hL, -hW), id: 'length' },
+                    { pos: new THREE.Vector2(hL, -hW), id: 'width' },
+                    { pos: new THREE.Vector2(hL, hW), id: 'length' },
+                    { pos: new THREE.Vector2(-hL, hW), id: 'width' }
+                ];
+        }
+    }, [shape, L, W, notchL, notchW]);
+
+    const wallData = useMemo(() => {
+        return pointsData.map((p1Obj, i) => {
+            const p1 = p1Obj.pos;
+            const p2 = pointsData[(i + 1) % pointsData.length].pos;
+            const dist = p1.distanceTo(p2);
+            const angle = Math.atan2(p2.y - p1.y, p2.x - p1.x);
+            const opening = (openings || []).find(o => o.wallIndex === i);
+            const staticCenter = new THREE.Vector2().lerpVectors(p1, p2, 0.5);
+            return { staticCenter, dist, angle, opening, type: p1Obj.id };
+        });
+    }, [pointsData, openings]);
+
+    // --- 2. Camera View Mode Logic ---
+    useEffect(() => {
+        if (isPlacementMode) return;
+
+        // Reset interaction flag whenever viewMode changes so camera can auto-move again
+        setHasInteracted(false);
+
+        const offsetDist = 10;
+
+        if (viewMode === 'TOP') {
+            setViewTarget({
+                pos: new THREE.Vector3(0, 15, 0),
+                look: new THREE.Vector3(0, 0, 0)
+            });
+            if (controlsRef.current) controlsRef.current.enableRotate = false;
+        } else if (viewMode.startsWith('WALL_')) {
+            const wallIdx = parseInt(viewMode.split('_')[1]);
+            const wall = wallData[wallIdx];
+            if (wall) {
+                const angle = -wall.angle + Math.PI / 2;
+                setViewTarget({
+                    pos: new THREE.Vector3(
+                        wall.staticCenter.x + Math.cos(angle) * offsetDist,
+                        1.25,
+                        wall.staticCenter.y + Math.sin(angle) * offsetDist
+                    ),
+                    look: new THREE.Vector3(wall.staticCenter.x, 1.25, wall.staticCenter.y)
+                });
+            }
+            if (controlsRef.current) controlsRef.current.enableRotate = true;
+        } else {
+            setViewTarget({ pos: new THREE.Vector3(8, 8, 8), look: new THREE.Vector3(0, 0, 0) });
+            if (controlsRef.current) controlsRef.current.enableRotate = true;
+        }
+    }, [viewMode, wallData, isPlacementMode]);
+
+    useFrame(() => {
+        // ONLY lerp to target if user hasn't manually taken control
+        if (!hasInteracted) {
+            camera.position.lerp(viewTarget.pos, 0.1);
+            if (controlsRef.current) {
+                controlsRef.current.target.lerp(viewTarget.look, 0.1);
+                controlsRef.current.update();
+            }
+        }
+    });
+
+    // --- 3. Floor & Walls Logic ---
     const textureUrls = {
         wood: "https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/floors/FloorsCheckerboard_S_Diffuse.jpg",
         tiles: "https://threejs.org/examples/textures/grid.png"
@@ -32,125 +161,42 @@ function SceneContent({ roomData, wallColor, floorTexture, furnitureList, setFur
     const loadedTexture = useLoader(THREE.TextureLoader, floorTexture === 'wood' ? textureUrls.wood : textureUrls.tiles);
     if (loadedTexture) {
         loadedTexture.wrapS = loadedTexture.wrapT = THREE.RepeatWrapping;
-        // This makes 1 texture tile = 1 meter
-        loadedTexture.repeat.set(L, W);
+        loadedTexture.repeat.set(L / 2, W / 2);
     }
 
-    // 1. UPDATED: Points Logic (Hexagon oriented flat-side down, ignores width/notches)
-    const points = useMemo(() => {
-        const hL = L / 2;
-        const hW = W / 2;
-
-        switch (shape) {
-            case 'L_SHAPE':
-                // Logic: Start bottom-left and go clockwise
-                // Ensures the "Notch" is subtracted from the total L and W
-                return [
-                    new THREE.Vector2(-hL, -hW),          // Bottom Left
-                    new THREE.Vector2(-hL, hW),           // Top Left
-                    new THREE.Vector2(hL - notchL, hW),    // Top "Inner" corner
-                    new THREE.Vector2(hL - notchL, hW - notchW), // Notch corner
-                    new THREE.Vector2(hL, hW - notchW),    // Right "Inner" corner
-                    new THREE.Vector2(hL, -hW),           // Bottom Right
-                ];
-
-            case 'HEXAGON':
-                const hexPts = [];
-                for (let i = 0; i < 6; i++) {
-                    // Rotated to have flat sides on top/bottom
-                    const angle = (i / 6) * Math.PI * 2 + Math.PI / 6;
-                    // We multiply by hL and hW to allow for "stretched" hexagons 
-                    // if length and width are different
-                    hexPts.push(new THREE.Vector2(
-                        Math.cos(angle) * hL,
-                        Math.sin(angle) * hW
-                    ));
-                }
-                return hexPts;
-
-            case 'T_SHAPE':
-                const armWidth = L - notchL; // Width of the vertical bar
-                const headHeight = notchW;   // Height of the horizontal bar
-                const hArm = armWidth / 2;
-                return [
-                    new THREE.Vector2(-hArm, -hW),        // Bottom Left
-                    new THREE.Vector2(-hArm, hW - headHeight), // Under-arm left
-                    new THREE.Vector2(-hL, hW - headHeight),   // Arm tip left
-                    new THREE.Vector2(-hL, hW),           // Top Left
-                    new THREE.Vector2(hL, hW),            // Top Right
-                    new THREE.Vector2(hL, hW - headHeight),    // Arm tip right
-                    new THREE.Vector2(hArm, hW - headHeight),  // Under-arm right
-                    new THREE.Vector2(hArm, -hW),         // Bottom Right
-                ];
-
-            default: // SQUARE
-                return [
-                    new THREE.Vector2(-hL, -hW),
-                    new THREE.Vector2(-hL, hW),
-                    new THREE.Vector2(hL, hW),
-                    new THREE.Vector2(hL, -hW)
-                ];
-        }
-    }, [shape, L, W, notchL, notchW]);
-
-    const wallData = useMemo(() => {
-        return points.map((p1, i) => {
-            const p2 = points[(i + 1) % points.length];
-            const dist = p1.distanceTo(p2);
-            const angle = Math.atan2(p2.y - p1.y, p2.x - p1.x);
-            const opening = openings.find(o => o.wallIndex === i);
-
-            // If no opening, center is the midpoint. 
-            // If opening exists, lerp between p1 and p2 using the offset.
-            const t = opening ? (opening.offset ?? 0.5) : 0.5;
-            const center = new THREE.Vector2().lerpVectors(p1, p2, t);
-
-            return { center, dist, angle, opening };
-        });
-    }, [points, openings]);
-
     const floorShape = useMemo(() => {
-        if (!points || points.length === 0) return null;
-
+        const pts = pointsData.map(p => p.pos);
+        if (!pts.length) return null;
         const shapeObj = new THREE.Shape();
-        // Start at the first point
-        shapeObj.moveTo(points[0].x, points[0].y);
-
-        // Draw lines to each subsequent point
-        for (let i = 1; i < points.length; i++) {
-            shapeObj.lineTo(points[i].x, points[i].y);
-        }
-
+        shapeObj.moveTo(pts[0].x, pts[0].y);
+        for (let i = 1; i < pts.length; i++) shapeObj.lineTo(pts[i].x, pts[i].y);
         shapeObj.closePath();
         return shapeObj;
-    }, [points]);
+    }, [pointsData]);
 
     const handleFloorClick = (e) => {
         e.stopPropagation();
-        if (!selectedModel) { setSelectedIndex(null); return; }
+        if (isPlacementMode) return;
+        if (!selectedModel) { setSelectedIndex?.(null); return; }
         const newPos = [e.point.x, 0, e.point.z];
-        if (checkCollision(newPos, selectedModel.dimensions || { width: 1, depth: 1 }, furnitureList)) {
-            alert("⚠️ Collision detected!"); return;
-        }
+        if (checkCollision(newPos, selectedModel.dimensions || { width: 1, depth: 1 }, furnitureList)) return;
         setFurnitureList([...furnitureList, { id: Date.now(), ...selectedModel, position: newPos, rotation: 0 }]);
         setSelectedModel(null);
     };
 
     return (
         <>
-            <OrbitControls ref={controlsRef} makeDefault />
+            <OrbitControls
+                ref={controlsRef}
+                makeDefault
+                onStart={() => setHasInteracted(true)} // Disable auto-snap when user moves camera
+            />
             <ambientLight intensity={0.7} />
             <pointLight position={[10, 10, 10]} intensity={1.5} />
             <Grid infiniteGrid cellSize={0.5} sectionSize={1} fadeDistance={30} />
 
-            {/* VISUAL FLOOR (Now serves as the click target) */}
             {floorShape && (
-                <mesh
-                    key={`${shape}-${L}-${W}-${notchL}-${notchW}`} // Forces re-render on change
-                    rotation={[Math.PI / 2, 0, 0]}
-                    position={[0, -0.001, 0]} // Tiny offset to prevent Z-fighting with grid
-                    onPointerDown={handleFloorClick}
-                >
+                <mesh rotation={[Math.PI / 2, 0, 0]} position={[0, -0.001, 0]} onPointerDown={handleFloorClick}>
                     <shapeGeometry args={[floorShape]} />
                     <meshStandardMaterial
                         color={floorTexture === 'plain' ? '#e2e8f0' : '#ffffff'}
@@ -160,30 +206,68 @@ function SceneContent({ roomData, wallColor, floorTexture, furnitureList, setFur
                 </mesh>
             )}
 
-            {wallData.map((wall, i) => (
-                <group key={i} position={[wall.center.x, 0, wall.center.y]} rotation={[0, -wall.angle, 0]}>
-                    {!wall.opening ? (
-                        <mesh position={[0, 1.25, 0]}>
+            {wallData.map((wall, i) => {
+                const isHighlitByParent = highlightedWallType === wall.type;
+                const isHoveredLocal = hoveredWall === i;
+
+                let isHidden = false;
+                if (isPreviewActive && viewMode.startsWith('WALL_')) {
+                    const viewDir = new THREE.Vector3().subVectors(viewTarget.look, viewTarget.pos).normalize();
+                    const wallPos = new THREE.Vector3(wall.staticCenter.x, 1.25, wall.staticCenter.y);
+                    const dirToWall = new THREE.Vector3().subVectors(wallPos, camera.position).normalize();
+                    if (viewDir.dot(dirToWall) < 0.1) isHidden = true;
+                }
+
+                const finalColor = (isHighlitByParent || (isPlacementMode && isHoveredLocal)) ? "#3b82f6" : wallColor;
+
+                return (
+                    <group
+                        key={i}
+                        position={[wall.staticCenter.x, 0, wall.staticCenter.y]}
+                        rotation={[0, -wall.angle, 0]}
+                        visible={!isHidden}
+                    >
+                        <mesh
+                            visible={false}
+                            onClick={(e) => { e.stopPropagation(); if (isPlacementMode) onWallClick(i); }}
+                            onPointerOver={() => isPlacementMode && setHoveredWall(i)}
+                            onPointerOut={() => setHoveredWall(null)}
+                        >
                             <planeGeometry args={[wall.dist, 2.5]} />
-                            <meshStandardMaterial color={wallColor} side={THREE.DoubleSide} />
                         </mesh>
-                    ) : (
-                        <WallAperture wall={wall} color={wallColor} />
-                    )}
-                </group>
-            ))}
+
+                        {!wall.opening ? (
+                            <mesh position={[0, 1.25, 0]}>
+                                <planeGeometry args={[wall.dist, 2.5]} />
+                                <meshStandardMaterial color={finalColor} side={THREE.DoubleSide} />
+                            </mesh>
+                        ) : (
+                            <WallAperture wall={wall} color={finalColor} />
+                        )}
+                    </group>
+                );
+            })}
 
             {furnitureList.map((it, idx) => (
-                <FurniturePrimitive key={it.id} item={it} index={idx} isSelected={selectedIndex === idx} furnitureList={furnitureList} setFurnitureList={setFurnitureList} setSelectedIndex={setSelectedIndex} points={points} controlsRef={controlsRef} />
+                <FurniturePrimitive
+                    key={it.id}
+                    item={it}
+                    index={idx}
+                    isSelected={selectedIndex === idx}
+                    furnitureList={furnitureList}
+                    setFurnitureList={setFurnitureList}
+                    setSelectedIndex={setSelectedIndex}
+                    points={pointsData.map(p => p.pos)}
+                    controlsRef={controlsRef}
+                />
             ))}
         </>
     );
 }
 
-// Room Export (UNCHANGED)
 export default function Room(props) {
     return (
-        <Canvas camera={{ position: [10, 10, 10], fov: 45 }}>
+        <Canvas camera={{ position: [8, 8, 8], fov: 45 }} shadows>
             <Suspense fallback={null}>
                 <SceneContent {...props} />
             </Suspense>
@@ -191,64 +275,44 @@ export default function Room(props) {
     );
 }
 
-// WallAperture (UNCHANGED)
 function WallAperture({ wall, color }) {
     const { opening, dist } = wall;
     const isDoor = opening.type === 'DOOR';
-
-    // Standard dimensions
     const holeW = isDoor ? 1.0 : 1.4;
     const holeH = isDoor ? 2.1 : 1.2;
     const sillH = isDoor ? 0.0 : 0.9;
 
-    // Calculate how far from the start of the wall the opening center is
-    const centerPos = opening.offset * dist;
-
-    // Calculate widths of the solid wall parts
-    const leftWidth = centerPos - (holeW / 2);
-    const rightWidth = (dist - centerPos) - (holeW / 2);
+    const holeCenterOnWall = (opening.offset * dist) - (dist / 2);
+    const leftSectionWidth = (opening.offset * dist) - (holeW / 2);
+    const rightSectionWidth = (dist - (opening.offset * dist)) - (holeW / 2);
 
     return (
         <group>
-            {/* Left Wall Segment */}
-            {leftWidth > 0 && (
-                <mesh position={[-dist / 2 + leftWidth / 2, 1.25, 0]}>
-                    <planeGeometry args={[leftWidth, 2.5]} />
+            {leftSectionWidth > 0 && (
+                <mesh position={[(-dist / 2) + (leftSectionWidth / 2), 1.25, 0]}>
+                    <planeGeometry args={[leftSectionWidth, 2.5]} />
                     <meshStandardMaterial color={color} side={THREE.DoubleSide} />
                 </mesh>
             )}
-
-            {/* Right Wall Segment */}
-            {rightWidth > 0 && (
-                <mesh position={[dist / 2 - rightWidth / 2, 1.25, 0]}>
-                    <planeGeometry args={[rightWidth, 2.5]} />
+            {rightSectionWidth > 0 && (
+                <mesh position={[(dist / 2) - (rightSectionWidth / 2), 1.25, 0]}>
+                    <planeGeometry args={[rightSectionWidth, 2.5]} />
                     <meshStandardMaterial color={color} side={THREE.DoubleSide} />
                 </mesh>
             )}
-
-            {/* Top Header (Above the door/window) */}
-            <mesh position={[centerPos - dist / 2, (2.5 + (sillH + holeH)) / 2, 0]}>
+            <mesh position={[holeCenterOnWall, (2.5 + (sillH + holeH)) / 2, 0]}>
                 <planeGeometry args={[holeW, 2.5 - (sillH + holeH)]} />
                 <meshStandardMaterial color={color} side={THREE.DoubleSide} />
             </mesh>
-
-            {/* Bottom Sill (Windows only) */}
             {!isDoor && (
-                <mesh position={[centerPos - dist / 2, sillH / 2, 0]}>
+                <mesh position={[holeCenterOnWall, sillH / 2, 0]}>
                     <planeGeometry args={[holeW, sillH]} />
                     <meshStandardMaterial color={color} side={THREE.DoubleSide} />
                 </mesh>
             )}
-
-            {/* Glass / Door Surface */}
-            <mesh position={[centerPos - dist / 2, sillH + holeH / 2, 0]}>
+            <mesh position={[holeCenterOnWall, sillH + holeH / 2, 0.01]}>
                 <planeGeometry args={[holeW, holeH]} />
-                <meshStandardMaterial
-                    color={isDoor ? "#1a1a1a" : "#87ceeb"}
-                    transparent
-                    opacity={0.4}
-                    side={THREE.DoubleSide}
-                />
+                <meshStandardMaterial color={isDoor ? "#1a1a1a" : "#87ceeb"} transparent opacity={0.6} side={THREE.DoubleSide} />
             </mesh>
         </group>
     );
