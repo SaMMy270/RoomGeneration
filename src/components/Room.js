@@ -32,7 +32,8 @@ function SceneContent({ roomData, wallColor, floorTexture, furnitureList, setFur
     const loadedTexture = useLoader(THREE.TextureLoader, floorTexture === 'wood' ? textureUrls.wood : textureUrls.tiles);
     if (loadedTexture) {
         loadedTexture.wrapS = loadedTexture.wrapT = THREE.RepeatWrapping;
-        loadedTexture.repeat.set(L / 2, W / 2);
+        // This makes 1 texture tile = 1 meter
+        loadedTexture.repeat.set(L, W);
     }
 
     // 1. UPDATED: Points Logic (Hexagon oriented flat-side down, ignores width/notches)
@@ -42,31 +43,52 @@ function SceneContent({ roomData, wallColor, floorTexture, furnitureList, setFur
 
         switch (shape) {
             case 'L_SHAPE':
+                // Logic: Start bottom-left and go clockwise
+                // Ensures the "Notch" is subtracted from the total L and W
                 return [
-                    new THREE.Vector2(-hL, -hW), new THREE.Vector2(hL, -hW),
-                    new THREE.Vector2(hL, hW - notchW), new THREE.Vector2(hL - notchL, hW - notchW),
-                    new THREE.Vector2(hL - notchL, hW), new THREE.Vector2(-hL, hW),
+                    new THREE.Vector2(-hL, -hW),          // Bottom Left
+                    new THREE.Vector2(-hL, hW),           // Top Left
+                    new THREE.Vector2(hL - notchL, hW),    // Top "Inner" corner
+                    new THREE.Vector2(hL - notchL, hW - notchW), // Notch corner
+                    new THREE.Vector2(hL, hW - notchW),    // Right "Inner" corner
+                    new THREE.Vector2(hL, -hW),           // Bottom Right
                 ];
-            case 'T_SHAPE':
-                const sW = notchW / 2; const headY = hW - notchL;
-                return [
-                    new THREE.Vector2(-sW, -hW), new THREE.Vector2(sW, -hW),
-                    new THREE.Vector2(sW, headY), new THREE.Vector2(hL, headY),
-                    new THREE.Vector2(hL, hW), new THREE.Vector2(-hL, hW),
-                    new THREE.Vector2(-hL, headY), new THREE.Vector2(-sW, headY),
-                ];
+
             case 'HEXAGON':
                 const hexPts = [];
                 for (let i = 0; i < 6; i++) {
-                    // Adding Math.PI / 6 rotates it to have a flat bottom edge
+                    // Rotated to have flat sides on top/bottom
                     const angle = (i / 6) * Math.PI * 2 + Math.PI / 6;
-                    hexPts.push(new THREE.Vector2(Math.cos(angle) * hL, Math.sin(angle) * hL));
+                    // We multiply by hL and hW to allow for "stretched" hexagons 
+                    // if length and width are different
+                    hexPts.push(new THREE.Vector2(
+                        Math.cos(angle) * hL,
+                        Math.sin(angle) * hW
+                    ));
                 }
                 return hexPts;
+
+            case 'T_SHAPE':
+                const armWidth = L - notchL; // Width of the vertical bar
+                const headHeight = notchW;   // Height of the horizontal bar
+                const hArm = armWidth / 2;
+                return [
+                    new THREE.Vector2(-hArm, -hW),        // Bottom Left
+                    new THREE.Vector2(-hArm, hW - headHeight), // Under-arm left
+                    new THREE.Vector2(-hL, hW - headHeight),   // Arm tip left
+                    new THREE.Vector2(-hL, hW),           // Top Left
+                    new THREE.Vector2(hL, hW),            // Top Right
+                    new THREE.Vector2(hL, hW - headHeight),    // Arm tip right
+                    new THREE.Vector2(hArm, hW - headHeight),  // Under-arm right
+                    new THREE.Vector2(hArm, -hW),         // Bottom Right
+                ];
+
             default: // SQUARE
                 return [
-                    new THREE.Vector2(-hL, -hW), new THREE.Vector2(hL, -hW),
-                    new THREE.Vector2(hL, hW), new THREE.Vector2(-hL, hW)
+                    new THREE.Vector2(-hL, -hW),
+                    new THREE.Vector2(-hL, hW),
+                    new THREE.Vector2(hL, hW),
+                    new THREE.Vector2(hL, -hW)
                 ];
         }
     }, [shape, L, W, notchL, notchW]);
@@ -89,9 +111,16 @@ function SceneContent({ roomData, wallColor, floorTexture, furnitureList, setFur
 
     const floorShape = useMemo(() => {
         if (!points || points.length === 0) return null;
+
         const shapeObj = new THREE.Shape();
+        // Start at the first point
         shapeObj.moveTo(points[0].x, points[0].y);
-        points.forEach((p, i) => { if (i !== 0) shapeObj.lineTo(p.x, p.y); });
+
+        // Draw lines to each subsequent point
+        for (let i = 1; i < points.length; i++) {
+            shapeObj.lineTo(points[i].x, points[i].y);
+        }
+
         shapeObj.closePath();
         return shapeObj;
     }, [points]);
@@ -116,7 +145,12 @@ function SceneContent({ roomData, wallColor, floorTexture, furnitureList, setFur
 
             {/* VISUAL FLOOR (Now serves as the click target) */}
             {floorShape && (
-                <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.01, 0]} onPointerDown={handleFloorClick}>
+                <mesh
+                    key={`${shape}-${L}-${W}-${notchL}-${notchW}`} // Forces re-render on change
+                    rotation={[Math.PI / 2, 0, 0]}
+                    position={[0, -0.001, 0]} // Tiny offset to prevent Z-fighting with grid
+                    onPointerDown={handleFloorClick}
+                >
                     <shapeGeometry args={[floorShape]} />
                     <meshStandardMaterial
                         color={floorTexture === 'plain' ? '#e2e8f0' : '#ffffff'}
